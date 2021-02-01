@@ -724,6 +724,8 @@ var defaultSysVars = []*SysVar{
 	// Used to block DoS.
 	{ScopeGlobal, MaxLoginAttempts, strconv.Itoa(DefMaxLoginAttempts)},
 	{ScopeGlobal, LoginBlockInterval, strconv.Itoa(DefLoginBlockInterval)},
+	// pboc
+	{ScopeSession, TIDBLoadBrokenData, "on"},
 }
 
 // SynonymsSysVariables is synonyms of system variables.
@@ -995,6 +997,8 @@ const (
 	LoginBlockInterval = "login_block_interval"
 	// ValidatePasswordPolicy is the name for 'validate_password' system variable.
 	ValidatePasswordPolicy = "validate_password_policy"
+	// TIDBNotLoadWrongData is used to control whether to load broken data.
+	TIDBLoadBrokenData = "tidb_load_broken_data"
 )
 
 // GlobalVarAccessor is the interface for accessing global scope system and status variables.

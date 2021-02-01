@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
@@ -121,6 +122,7 @@ type LoadDataInfo struct {
 	FieldsInfo  *ast.FieldsClause
 	LinesInfo   *ast.LinesClause
 	IgnoreLines uint64
+	lineNumber  uint64
 	Ctx         sessionctx.Context
 	rows        [][]types.Datum
 	Drained     bool
@@ -411,6 +413,7 @@ func (e *LoadDataInfo) InsertData(ctx context.Context, prevData, curData []byte)
 			curData = nil
 		}
 
+		e.lineNumber++
 		if e.IgnoreLines > 0 {
 			e.IgnoreLines--
 			continue
@@ -422,7 +425,12 @@ func (e *LoadDataInfo) InsertData(ctx context.Context, prevData, curData []byte)
 		// rowCount will be used in fillRow(), last insert ID will be assigned according to the rowCount = 1.
 		// So should add first here.
 		e.rowCount++
-		e.rows = append(e.rows, e.colsToRow(ctx, cols))
+		row := e.colsToRow(ctx, cols, line)
+		if row == nil {
+			e.rowCount--
+			continue
+		}
+		e.rows = append(e.rows, row)
 		e.curBatchCnt++
 		if e.maxRowsInBatch != 0 && e.rowCount%e.maxRowsInBatch == 0 {
 			reachLimit = true
@@ -460,7 +468,7 @@ func (e *LoadDataInfo) SetMessage() {
 	e.ctx.GetSessionVars().StmtCtx.SetMessage(msg)
 }
 
-func (e *LoadDataInfo) colsToRow(ctx context.Context, cols []field) []types.Datum {
+func (e *LoadDataInfo) colsToRow(ctx context.Context, cols []field, line []byte) []types.Datum {
 	totalCols := e.Table.Cols()
 	for i := 0; i < len(e.row); i++ {
 		if i >= len(cols) {
@@ -480,13 +488,40 @@ func (e *LoadDataInfo) colsToRow(ctx context.Context, cols []field) []types.Datu
 			e.row[i].SetString(string(cols[i].str), mysql.DefaultCollationName)
 		}
 	}
+	if err := e.checkRowValid(ctx, cols, line); err != nil {
+		logutil.LoadDataFailure.Info(err.Error())
+		loadBrokenData, _ := e.ctx.GetSessionVars().GetSystemVar(variable.TIDBLoadBrokenData)
+		if strings.EqualFold(loadBrokenData, "off") {
+			return nil
+		}
+	}
 	// a new row buffer will be allocated in getRow
 	row, err := e.getRow(ctx, e.row)
 	if err != nil {
+		logutil.LoadDataFailure.Infof("load file [%s], line [%d]: [%s]: %s", e.Path, e.lineNumber, string(line), err.Error())
 		e.handleWarning(err)
 		return nil
 	}
 	return row
+}
+
+func (e *LoadDataInfo) checkRowValid(ctx context.Context, cols []field, line []byte) error {
+	if len(cols) > len(e.row) {
+		return errors.Errorf("load file [%s], line %d: [%s] has too much columns", e.Path, e.lineNumber, string(line))
+	}
+
+	if len(cols) < len(e.row) {
+		return errors.Errorf("load file [%s], line %d: [%s] is missing columns", e.Path, e.lineNumber, string(line))
+	}
+
+	for i, v := range e.row {
+		_, err := table.CastValue(e.ctx, v, e.insertColumns[i].ToInfo())
+		if err != nil {
+			return errors.Errorf("load file [%s], line %d: [%s] %s", e.Path, e.lineNumber, string(line), err.Error())
+		}
+	}
+
+	return nil
 }
 
 func (e *LoadDataInfo) addRecordLD(ctx context.Context, row []types.Datum) (int64, error) {

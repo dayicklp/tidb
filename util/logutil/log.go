@@ -49,6 +49,8 @@ const (
 	DefaultRecordPlanInSlowLog = 1
 	// DefaultTiDBEnableSlowLog enables TiDB to log slow queries.
 	DefaultTiDBEnableSlowLog = true
+	// loadDataFailureFilePath records load data failures
+	loadDataFailureFilePath = "tidb-load-data-failure.log"
 )
 
 // EmptyFileLogConfig is an empty FileLogConfig.
@@ -249,6 +251,8 @@ func initFileLog(cfg *zaplog.FileLogConfig, logger *log.Logger) error {
 	return nil
 }
 
+var LoadDataFailure = log.StandardLogger()
+
 // SlowQueryLogger is used to log slow query, InitLogger will modify it according to config file.
 var SlowQueryLogger = log.StandardLogger()
 
@@ -270,6 +274,13 @@ func InitLogger(cfg *LogConfig) error {
 		if err := initFileLog(&cfg.File, nil); err != nil {
 			return errors.Trace(err)
 		}
+	}
+
+	LoadDataFailure = log.New()
+	tmp := cfg.File
+	tmp.Filename = loadDataFailureFilePath
+	if err := initFileLog(&tmp, LoadDataFailure); err != nil {
+		return errors.Trace(err)
 	}
 
 	if len(cfg.SlowQueryFile) != 0 {
