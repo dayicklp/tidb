@@ -15,6 +15,7 @@ package expression
 
 import (
 	"github.com/cznic/mathutil"
+	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
@@ -862,4 +863,25 @@ func (b *builtinIfNullJSONSig) evalJSON(row chunk.Row) (json.BinaryJSON, bool, e
 	}
 	arg1, isNull, err := b.args[1].EvalJSON(b.ctx, row)
 	return arg1, isNull || err != nil, err
+}
+
+type decodeCaseFunctionClass struct {
+	baseFunctionClass
+}
+
+func (b *decodeCaseFunctionClass) getFunction(ctx sessionctx.Context, args []Expression) (sig builtinFunc, err error) {
+	if err = b.verifyArgs(args); err != nil {
+		return nil, err
+	}
+
+	expr := args[0]
+	for i := 1; i < len(args)-1; i += 2 {
+		f, err := NewFunction(ctx, ast.EQ, types.NewFieldType(mysql.TypeTiny), expr, args[i])
+		if err != nil {
+			return nil, err
+		}
+		args[i] = f
+	}
+
+	return funcs[ast.Case].getFunction(ctx, args[1:])
 }

@@ -703,8 +703,9 @@ var funcs = map[string]functionClass{
 	ast.FormatNanoTime: &formatNanoTimeFunctionClass{baseFunctionClass{ast.FormatNanoTime, 1, 1}},
 
 	// control functions
-	ast.If:     &ifFunctionClass{baseFunctionClass{ast.If, 3, 3}},
-	ast.Ifnull: &ifNullFunctionClass{baseFunctionClass{ast.Ifnull, 2, 2}},
+	ast.If:         &ifFunctionClass{baseFunctionClass{ast.If, 3, 3}},
+	ast.Ifnull:     &ifNullFunctionClass{baseFunctionClass{ast.Ifnull, 2, 2}},
+	ast.DecodeCase: &decodeCaseFunctionClass{baseFunctionClass{ast.DecodeCase, 3, 255}},
 
 	// miscellaneous functions
 	ast.Sleep:           &sleepFunctionClass{baseFunctionClass{ast.Sleep, 1, 1}},

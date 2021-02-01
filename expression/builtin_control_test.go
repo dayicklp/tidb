@@ -55,6 +55,31 @@ func (s *testEvaluatorSuite) TestCaseWhen(c *C) {
 	c.Assert(err, NotNil)
 }
 
+func (s *testEvaluatorSuite) TestDecodeCase(c *C) {
+	tbl := []struct {
+		Arg []interface{}
+		Ret interface{}
+	}{
+		{[]interface{}{"ab", "a", 1, "ab", 2}, 2},
+		{[]interface{}{123, 1, 2, 2, 3, 10}, 10},
+		{[]interface{}{123, 1, 2, 2, 3}, nil},
+		{[]interface{}{nil, nil, 1, 2, 3, 10}, 10},
+		{[]interface{}{0.0, 0.1, 0.1, 0.0, 2}, 2},
+	}
+	fc := funcs[ast.DecodeCase]
+	for _, t := range tbl {
+		f, err := fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(t.Arg...)))
+		c.Assert(err, IsNil)
+		d, err := evalBuiltinFunc(f, chunk.Row{})
+		c.Assert(err, IsNil)
+		c.Assert(d, testutil.DatumEquals, types.NewDatum(t.Ret))
+	}
+	f, err := fc.getFunction(s.ctx, s.datumsToConstants(types.MakeDatums(errors.New("can't convert string to bool"), 1, true)))
+	c.Assert(err, IsNil)
+	_, err = evalBuiltinFunc(f, chunk.Row{})
+	c.Assert(err, NotNil)
+}
+
 func (s *testEvaluatorSuite) TestIf(c *C) {
 	stmtCtx := s.ctx.GetSessionVars().StmtCtx
 	origin := stmtCtx.IgnoreTruncate

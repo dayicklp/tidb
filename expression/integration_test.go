@@ -6143,6 +6143,18 @@ func (s *testIntegrationSerialSuite) TestCollateDDL(c *C) {
 	tk.MustExec("drop database t;")
 }
 
+func (s *testIntegrationSerialSuite) TestDecodeCase(c *C) {
+	tk := testkit.NewTestKit(c, s.store)
+	tk.MustExec("use test")
+	tk.MustQuery("select decode_case(1+2*2, 1, 1, 0, 0, 5, 'a', 'default')").Check(testkit.Rows("a"))
+
+	tk.MustExec("create table t(a int, b char(10))")
+	tk.MustExec("insert into t values (1, 'a'), (2, 'c')")
+
+	tk.MustQuery("select decode_case(a*2, 1, a*10, 2, a*20, 3, a*30, 4, a*40, a) from t").Check(testkit.Rows("20", "80"))
+	tk.MustQuery("select decode_case(b, 'a', 'A', 'default') from t").Check(testkit.Rows("A", "default"))
+}
+
 func (s *testIntegrationSuite) TestNegativeZeroForHashJoin(c *C) {
 	tk := testkit.NewTestKit(c, s.store)
 	tk.MustExec("use test;")
