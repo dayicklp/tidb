@@ -501,3 +501,19 @@ func (ts *ConnTestSuite) TestShutdownOrNotify(c *C) {
 	c.Assert(cc.ShutdownOrNotify(), IsFalse)
 	c.Assert(cc.status, Equals, connStatusWaitShutdown)
 }
+
+func (ts *ConnTestSuite) TestConnectionAllowList(c *C) {
+
+	// default
+	c.Assert(checkPeerHostPermitted("127.0.0.1", []string{"0.0.0.0/0", "::/0"}), IsNil)
+
+	// user specifies CIDR block.
+	c.Assert(checkPeerHostPermitted("192.168.0.5", []string{"192.168.0.0/24"}), IsNil)
+	c.Assert(checkPeerHostPermitted("192.168.0.5", []string{"192.168.0.5/32"}), IsNil)
+	c.Assert(checkPeerHostPermitted("192.168.0.5", []string{"192.168.0.6/32"}), NotNil)
+	c.Assert(checkPeerHostPermitted("192.168.0.5", []string{"192.168.0.6/32", "0.0.0.0/0"}), IsNil)
+
+	// invalid entry followed by valid entry is okay.
+	c.Assert(checkPeerHostPermitted("127.0.0.1", []string{"bogus", "0.0.0.0/0", "::/0"}), IsNil)
+
+}

@@ -627,6 +627,22 @@ func (cc *clientConn) openSessionAndDoAuth(authData []byte) error {
 	return nil
 }
 
+func checkPeerHostPermitted(host string, allowList []string) error {
+	for _, allow := range allowList {
+		_, ipnet, err := net.ParseCIDR(allow)
+		if err != nil {
+			// could not parse the CIDR block mentioned.
+			// write an error to the log file, and try the next.
+			terror.Log(err)
+			continue
+		}
+		if ipnet.Contains(net.ParseIP(host)) { // success!
+			return nil
+		}
+	}
+	return fmt.Errorf("peering from remote host: '%s' is not permitted", host)
+}
+
 func (cc *clientConn) PeerHost(hasPassword string) (host string, err error) {
 	if len(cc.peerHost) > 0 {
 		return cc.peerHost, nil
@@ -645,7 +661,7 @@ func (cc *clientConn) PeerHost(hasPassword string) (host string, err error) {
 	}
 	cc.peerHost = host
 	cc.peerPort = port
-	return
+	return host, checkPeerHostPermitted(host, config.GetGlobalConfig().ConnectionAllowHosts)
 }
 
 // Run reads client query and writes query result to client in for loop, if there is a panic during query handling,

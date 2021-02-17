@@ -15,6 +15,10 @@ store = "mocktikv"
 # TiDB storage path.
 path = "/tmp/tidb"
 
+# only allow connections from the following hosts, specified as a CIDR block
+# Note: a firewall is usually a better fit!
+connection-allow-hosts = ["0.0.0.0/0", "::/0"]
+
 # The socket file to use for connection.
 socket = ""
 
