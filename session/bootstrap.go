@@ -296,6 +296,15 @@ const (
 		lock_time timestamp default null,
 		primary key(USER, HOST)
 	)`
+
+	// CreateGlobalGrantsTable stores dynamic privs
+	CreateGlobalGrantsTable = `CREATE TABLE IF NOT EXISTS mysql.global_grants (
+		USER char(32) NOT NULL DEFAULT '',
+		HOST char(255) NOT NULL DEFAULT '',
+		PRIV char(32) NOT NULL DEFAULT '',
+		WITH_GRANT_OPTION enum('N','Y') NOT NULL DEFAULT 'N',
+		PRIMARY KEY (USER,HOST,PRIV)
+	);`
 )
 
 // bootstrap initiates system DB for a store.
@@ -400,6 +409,8 @@ const (
 	version46 = 46
 	// version47 init a tidb_audit user.
 	version47 = 47
+	// version48 introduces adds mysql.global_grants for DYNAMIC privileges
+	version48 = 48
 )
 
 var (
@@ -450,6 +461,7 @@ var (
 		upgradeToVer45,
 		upgradeToVer46,
 		upgradeToVer47,
+		upgradeToVer48,
 	}
 )
 
@@ -1084,6 +1096,13 @@ func upgradeToVer47(s Session, ver int64) {
 		("%", "tidb_audit", "", "Y", "N", "N", "Y", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N")`)
 }
 
+func upgradeToVer48(s Session, ver int64) {
+	if ver >= version48 {
+		return
+	}
+	doReentrantDDL(s, CreateGlobalGrantsTable)
+}
+
 // updateBootstrapVer updates bootstrap version variable in mysql.TiDB table.
 func updateBootstrapVer(s Session) {
 	// Update bootstrap version.
@@ -1148,6 +1167,9 @@ func doDDLWorks(s Session) {
 	// Create opt_rule_blacklist table.
 	mustExecute(s, CreateOptRuleBlacklist)
 	mustExecute(s, CreateLoginBlackList)
+	// Create global_grants
+	mustExecute(s, CreateGlobalGrantsTable)
+
 }
 
 // doDMLWorks executes DML statements in bootstrap stage.

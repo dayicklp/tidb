@@ -540,3 +540,25 @@ func (p *UserPrivileges) GetAllRoles(user, host string) []*auth.RoleIdentity {
 	mysqlPrivilege := p.Handle.Get()
 	return mysqlPrivilege.getAllRoles(user, host)
 }
+
+// RequestDynamicVerification implements the Manager interface.
+func (p *UserPrivileges) RequestDynamicVerification(activeRoles []*auth.RoleIdentity, privName string, grantable bool) bool {
+	if SkipWithGrant {
+		return true
+	}
+	if p.user == "" && p.host == "" {
+		return true
+	}
+
+	mysqlPriv := p.Handle.Get()
+	return mysqlPriv.RequestDynamicVerification(activeRoles, p.user, p.host, privName, grantable)
+}
+
+// IsDynamicPrivilege returns a bool
+func IsDynamicPrivilege(privNameInUpper string) bool {
+	switch privNameInUpper {
+	case "BACKUP_ADMIN", "SYSTEM_VARIABLES_ADMIN", "ROLE_ADMIN", "CONNECTION_ADMIN":
+		return true
+	}
+	return false
+}

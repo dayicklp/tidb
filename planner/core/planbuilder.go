@@ -56,11 +56,13 @@ import (
 )
 
 type visitInfo struct {
-	privilege mysql.PrivilegeType
-	db        string
-	table     string
-	column    string
-	err       error
+	privilege        mysql.PrivilegeType
+	db               string
+	table            string
+	column           string
+	err              error
+	dynamicPriv      string
+	dynamicWithGrant bool
 }
 
 type indexNestedLoopJoinTables struct {
@@ -587,8 +589,8 @@ func (b *PlanBuilder) buildSet(ctx context.Context, v *ast.SetStmt) (Plan, error
 	p := &Set{}
 	for _, vars := range v.Variables {
 		if vars.IsGlobal {
-			err := ErrSpecificAccessDenied.GenWithStackByArgs("SUPER")
-			b.visitInfo = appendVisitInfo(b.visitInfo, mysql.SuperPriv, "", "", "", err)
+			err := ErrSpecificAccessDenied.GenWithStackByArgs("SUPER or SYSTEM_VARIABLES_ADMIN")
+			b.visitInfo = appendDynamicVisitInfo(b.visitInfo, "SYSTEM_VARIABLES_ADMIN", false, err)
 		}
 		assign := &expression.VarAssignment{
 			Name:     vars.Name,
@@ -1773,14 +1775,11 @@ func (b *PlanBuilder) buildSimple(node ast.StmtNode) (Plan, error) {
 			}
 		}
 		b.visitInfo = collectVisitInfoFromGrantStmt(b.ctx, b.visitInfo, raw)
-	case *ast.GrantRoleStmt:
-		err := ErrSpecificAccessDenied.GenWithStackByArgs("SUPER")
-		b.visitInfo = appendVisitInfo(b.visitInfo, mysql.SuperPriv, "", "", "", err)
+	case *ast.GrantRoleStmt, *ast.RevokeRoleStmt:
+		err := ErrSpecificAccessDenied.GenWithStackByArgs("SUPER or ROLE_ADMIN")
+		b.visitInfo = appendDynamicVisitInfo(b.visitInfo, "ROLE_ADMIN", false, err)
 	case *ast.RevokeStmt:
 		b.visitInfo = collectVisitInfoFromRevokeStmt(b.ctx, b.visitInfo, raw)
-	case *ast.RevokeRoleStmt:
-		err := ErrSpecificAccessDenied.GenWithStackByArgs("SUPER")
-		b.visitInfo = appendVisitInfo(b.visitInfo, mysql.SuperPriv, "", "", "", err)
 	case *ast.KillStmt:
 		// If you have the SUPER privilege, you can kill all threads and statements.
 		// Otherwise, you can kill only your own threads and statements.
@@ -1789,7 +1788,8 @@ func (b *PlanBuilder) buildSimple(node ast.StmtNode) (Plan, error) {
 			if pi, ok := sm.GetProcessInfo(raw.ConnectionID); ok {
 				loginUser := b.ctx.GetSessionVars().User
 				if pi.User != loginUser.Username {
-					b.visitInfo = appendVisitInfo(b.visitInfo, mysql.SuperPriv, "", "", "", nil)
+					err := ErrSpecificAccessDenied.GenWithStackByArgs("SUPER or CONNECTION_ADMIN")
+					b.visitInfo = appendDynamicVisitInfo(b.visitInfo, "CONNECTION_ADMIN", false, err)
 				}
 			}
 		}
@@ -1848,6 +1848,10 @@ func collectVisitInfoFromGrantStmt(sctx sessionctx.Context, vi []visitInfo, stmt
 
 	var allPrivs []mysql.PrivilegeType
 	for _, item := range stmt.Privs {
+		if item.Priv == mysql.ExtendedPriv {
+			vi = appendDynamicVisitInfo(vi, item.Name, stmt.WithGrant, nil)
+			continue
+		}
 		if item.Priv == mysql.AllPriv {
 			switch stmt.Level.Level {
 			case ast.GrantLevelGlobal:

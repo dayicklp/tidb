@@ -930,6 +930,7 @@ const (
 	ErrWindowNoGroupOrderUnused                                     = 3597
 	ErrWindowExplainJSON                                            = 3598
 	ErrWindowFunctionIgnoresFrame                                   = 3599
+	ErrIllegalPrivilegeLevel                                        = 3619
 	ErrDataTruncatedFunctionalIndex                                 = 3751
 	ErrDataOutOfRangeFunctionalIndex                                = 3752
 	ErrFunctionalIndexOnJSONOrGeometryFunction                      = 3753
@@ -953,6 +954,7 @@ const (
 	ErrJSONValueOutOfRangeForFuncIndex                              = 3904
 	ErrFunctionalIndexDataIsTooLong                                 = 3907
 	ErrFunctionalIndexNotApplicable                                 = 3909
+	ErrDynamicPrivilegeNotRegistered                                = 3929
 	ErrConstraintDoesNotExist                                       = 3940
 
 	// MariaDB errors.

@@ -759,3 +759,19 @@ func (s *testInfoschemaTableSuite) TestSequences(c *C) {
 	tk.MustExec("CREATE SEQUENCE test.seq2 start = -9 minvalue -10 maxvalue 10 increment -1 cache 15")
 	tk.MustQuery("SELECT * FROM information_schema.sequences WHERE sequence_schema='test' AND sequence_name='seq2'").Check(testkit.Rows("def test seq2 1 15 0 -1 10 -10 -9 "))
 }
+
+func (s *testInfoschemaTableSuite) TestUserPrivilegesTable(c *C) {
+	tk := testkit.NewTestKit(c, s.store)
+	// test the privilege of new user for information_schema.user_privileges
+	tk.MustExec("create user usageuser")
+	tk.MustQuery(`SELECT * FROM information_schema.user_privileges WHERE grantee="'usageuser'@'%'"`).Check(testkit.Rows("'usageuser'@'%' def USAGE NO"))
+	// the usage row disappears when there is a non-dynamic privilege added
+	tk.MustExec("GRANT SELECT ON *.* to usageuser")
+	tk.MustQuery(`SELECT * FROM information_schema.user_privileges WHERE grantee="'usageuser'@'%'"`).Check(testkit.Rows("'usageuser'@'%' def Select NO"))
+	// test grant privilege
+	tk.MustExec("GRANT SELECT ON *.* to usageuser WITH GRANT OPTION")
+	tk.MustQuery(`SELECT * FROM information_schema.user_privileges WHERE grantee="'usageuser'@'%'"`).Check(testkit.Rows("'usageuser'@'%' def Select YES"))
+	// test DYNAMIC privs
+	tk.MustExec("GRANT BACKUP_ADMIN ON *.* to usageuser")
+	tk.MustQuery(`SELECT * FROM information_schema.user_privileges WHERE grantee="'usageuser'@'%'" ORDER BY privilege_type`).Check(testkit.Rows("'usageuser'@'%' def BACKUP_ADMIN NO", "'usageuser'@'%' def Select YES"))
+}

@@ -166,8 +166,14 @@ func (e *GrantExec) Next(ctx context.Context, req *chunk.Chunk) error {
 				return err
 			}
 		}
+		// Previously "WITH GRANT OPTION" implied setting the Grant_Priv in mysql.user.
+		// However, with DYNAMIC privileges the GRANT OPTION is individually grantable, and not a global
+		// property of the user. The logic observed in MySQL 8.0 is as follows:
+		// - The GRANT OPTION applies to all PrivElems in e.Privs.
+		// - Thus, if PrivElems contains any non-DYNAMIC privileges, the user GRANT option needs to be set.
+		// - If it contains ONLY dynamic privileges, don't set the GRANT option, as it is individually set in the handling of dynamic options.
 		privs := e.Privs
-		if e.WithGrant {
+		if e.WithGrant && containsNonDynamicPriv(privs) {
 			privs = append(privs, &ast.PrivElem{Priv: mysql.GrantPriv})
 		}
 
@@ -200,6 +206,15 @@ func (e *GrantExec) Next(ctx context.Context, req *chunk.Chunk) error {
 	isCommit = true
 	domain.GetDomain(e.ctx).NotifyUpdatePrivilege(e.ctx)
 	return nil
+}
+
+func containsNonDynamicPriv(privList []*ast.PrivElem) bool {
+	for _, priv := range privList {
+		if priv.Priv != mysql.ExtendedPriv {
+			return true
+		}
+	}
+	return false
 }
 
 // checkAndInitGlobalPriv checks if global scope privilege entry exists in mysql.global_priv.
@@ -387,6 +402,9 @@ func tlsOption2GlobalPriv(tlsOptions []*ast.TLSOption) (priv []byte, err error) 
 
 // grantLevelPriv grants priv to user in s.Level scope.
 func (e *GrantExec) grantLevelPriv(priv *ast.PrivElem, user *ast.UserSpec, internalSession sessionctx.Context) error {
+	if priv.Priv == mysql.ExtendedPriv {
+		return e.grantDynamicPriv(priv.Name, user, internalSession)
+	}
 	switch e.Level.Level {
 	case ast.GrantLevelGlobal:
 		return e.grantGlobalLevel(priv, user, internalSession)
@@ -400,6 +418,27 @@ func (e *GrantExec) grantLevelPriv(priv *ast.PrivElem, user *ast.UserSpec, inter
 	default:
 		return errors.Errorf("Unknown grant level: %#v", e.Level)
 	}
+}
+
+func (e *GrantExec) grantDynamicPriv(privName string, user *ast.UserSpec, internalSession sessionctx.Context) error {
+	privName = strings.ToUpper(privName)
+	if e.Level.Level != ast.GrantLevelGlobal { // DYNAMIC can only be *.*
+		return ErrIllegalPrivilegeLevel.GenWithStackByArgs(privName)
+	}
+	if !privileges.IsDynamicPrivilege(privName) {
+		// In GRANT context, MySQL returns a syntax error if the privilege has not been registered with the server:
+		// ERROR 1149 (42000): You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use
+		// But in REVOKE context, it returns a warning ErrDynamicPrivilegeNotRegistered. It is not strictly compatible,
+		// but TiDB returns the more useful ErrDynamicPrivilegeNotRegistered instead of a parse error.
+		return ErrDynamicPrivilegeNotRegistered.GenWithStackByArgs(privName)
+	}
+	grantOption := "N"
+	if e.WithGrant {
+		grantOption = "Y"
+	}
+	sql := fmt.Sprintf(`REPLACE INTO %s.global_grants (user,host,priv,with_grant_option) VALUES ('%s', '%s', '%s', '%s')`, mysql.SystemDB, user.User.Username, user.User.Hostname, privName, grantOption)
+	_, err := internalSession.(sqlexec.SQLExecutor).ExecuteInternal(context.Background(), sql)
+	return err
 }
 
 // grantGlobalLevel manipulates mysql.user table.

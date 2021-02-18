@@ -951,6 +951,8 @@ var MySQLErrName = map[uint16]string{
 	ErrFunctionalIndexNotApplicable:                          "Cannot use functional index '%s' due to type or collation conversion",
 	ErrCheckConstraintViolated:                               "Check constraint '%s' is violated.",
 	ErrConstraintDoesNotExist:                                "Constraint '%s' does not exist",
+	ErrDynamicPrivilegeNotRegistered:                         "Dynamic privilege '%s' is not registered with the server.",
+	ErrIllegalPrivilegeLevel:                                 "Illegal privilege level specified for %s",
 
 	// MariaDB errors.
 	ErrOnlyOneDefaultPartionAllowed:         "Only one DEFAULT partition allowed",
