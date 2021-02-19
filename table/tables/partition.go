@@ -192,12 +192,11 @@ func generateRangeColumnsPartitionExpr(ctx sessionctx.Context, pi *model.Partiti
 					buf.WriteString("true")
 				}
 				break
-			} else {
-				if buf.Len() > 0 {
-					buf.WriteString(" and ")
-				}
-				fmt.Fprintf(&buf, "%s < %s", pi.Columns[j], lessThan)
 			}
+			if buf.Len() > 0 {
+				buf.WriteString(" and ")
+			}
+			fmt.Fprintf(&buf, "%s < %s", pi.Columns[j], lessThan)
 		}
 
 		exprs, err := expression.ParseSimpleExprsWithNames(ctx, buf.String(), schema, names)

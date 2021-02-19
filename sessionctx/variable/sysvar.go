@@ -997,7 +997,7 @@ const (
 	LoginBlockInterval = "login_block_interval"
 	// ValidatePasswordPolicy is the name for 'validate_password' system variable.
 	ValidatePasswordPolicy = "validate_password_policy"
-	// TIDBNotLoadWrongData is used to control whether to load broken data.
+	// TIDBLoadBrokenData is used to control whether to load broken data.
 	TIDBLoadBrokenData = "tidb_load_broken_data"
 )
 

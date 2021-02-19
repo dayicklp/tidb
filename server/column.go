@@ -16,6 +16,8 @@ package server
 import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/util/hack"
+	"github.com/pingcap/tidb/util/logutil"
+	"go.uber.org/zap"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/transform"
 )
@@ -48,17 +50,36 @@ func (column *ColumnInfo) Dump(buffer []byte, encoder *encoding.Encoder) []byte 
 		orgnameDump = orgnameDump[0:maxColumnNameSize]
 	}
 	if encoder != nil {
-		str, _, _ := transform.String(encoder, "def")
+		str, _, err := transform.String(encoder, "def")
+		if err != nil {
+			logutil.BgLogger().Error("transform string failed", zap.Error(err))
+		}
 		buffer = dumpLengthEncodedString(buffer, hack.Slice(str))
-		str, _, _ = transform.String(encoder, column.Schema)
+		str, _, err = transform.String(encoder, column.Schema)
+		if err != nil {
+			logutil.BgLogger().Error("transform string failed", zap.Error(err))
+		}
 		buffer = dumpLengthEncodedString(buffer, hack.Slice(str))
-		str, _, _ = transform.String(encoder, column.Table)
+		str, _, err = transform.String(encoder, column.Table)
+		if err != nil {
+			logutil.BgLogger().Error("transform string failed", zap.Error(err))
+		}
+
 		buffer = dumpLengthEncodedString(buffer, hack.Slice(str))
-		str, _, _ = transform.String(encoder, column.OrgTable)
+		str, _, err = transform.String(encoder, column.OrgTable)
+		if err != nil {
+			logutil.BgLogger().Error("transform string failed", zap.Error(err))
+		}
 		buffer = dumpLengthEncodedString(buffer, hack.Slice(str))
-		str, _, _ = transform.String(encoder, string(nameDump))
+		str, _, err = transform.String(encoder, string(nameDump))
+		if err != nil {
+			logutil.BgLogger().Error("transform string failed", zap.Error(err))
+		}
 		buffer = dumpLengthEncodedString(buffer, hack.Slice(str))
-		str, _, _ = transform.String(encoder, string(orgnameDump))
+		str, _, err = transform.String(encoder, string(orgnameDump))
+		if err != nil {
+			logutil.BgLogger().Error("transform string failed", zap.Error(err))
+		}
 		buffer = dumpLengthEncodedString(buffer, hack.Slice(str))
 	} else {
 		buffer = dumpLengthEncodedString(buffer, []byte("def"))

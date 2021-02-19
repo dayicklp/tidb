@@ -1398,6 +1398,9 @@ func checkNumAndChar(ctx sessionctx.Context, authString []byte) bool {
 func checkPasswordPolicy(ctx sessionctx.Context, authString string, userName string) bool {
 	sessionVars := ctx.GetSessionVars()
 	checkUserName, err := variable.GetSessionSystemVar(sessionVars, variable.ValidatePasswordCheckUserName)
+	if err != nil {
+		logutil.BgLogger().Error("Get password policy fail.", zap.Error(err))
+	}
 	if checkUserName == "on" || checkUserName == "1" || checkUserName == "ON" {
 		if string(authString) == userName || reverse(userName) == string(authString) {
 			return false

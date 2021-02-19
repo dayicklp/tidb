@@ -251,6 +251,7 @@ func initFileLog(cfg *zaplog.FileLogConfig, logger *log.Logger) error {
 	return nil
 }
 
+// LoadDataFailure logs data failure
 var LoadDataFailure = log.StandardLogger()
 
 // SlowQueryLogger is used to log slow query, InitLogger will modify it according to config file.

@@ -261,6 +261,7 @@ type MySQLPrivilege struct {
 	BlackList     map[string][]blackListItem
 }
 
+// CheckPwdExpire checks if a password has expired
 func (p *MySQLPrivilege) CheckPwdExpire(u, h string) bool {
 	rec := p.matchUser(u, h)
 	if rec != nil {

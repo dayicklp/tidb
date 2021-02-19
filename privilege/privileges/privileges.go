@@ -123,6 +123,7 @@ func (p *UserPrivileges) RequestVerificationWithUser(db, table, column string, p
 	return mysqlPriv.RequestVerification(nil, user.Username, user.Hostname, db, table, column, priv)
 }
 
+// CheckPwdExpire checks for password expiry
 func (p *UserPrivileges) CheckPwdExpire() bool {
 	if SkipWithGrant {
 		return true

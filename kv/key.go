@@ -220,6 +220,7 @@ func (ih IntHandle) String() string {
 	return strconv.FormatInt(int64(ih), 10)
 }
 
+// NewCommonHandle creates a new handle
 func NewCommonHandle([]byte) (Handle, error) {
 	debug.PrintStack()
 	panic("should not be called in this cherry pick")

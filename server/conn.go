@@ -1426,8 +1426,8 @@ func (cc *clientConn) writeChunks(ctx context.Context, rs ResultSet, binary bool
 		// However, if `b.tp.Charset` is abnormally set to a wrong charset, we still
 		// return with error.
 		if e == nil {
-			logutil.BgLogger().Error("get encoding fails", zap.String("client charset", resultCharset))
-			errors.New("shouldn't not happened")
+			logutil.BgLogger().Error("get encoding failed", zap.String("client charset", resultCharset))
+			return errors.New("get encoding failed")
 		}
 		encoder = e.NewEncoder()
 	}
