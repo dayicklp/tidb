@@ -1098,6 +1098,18 @@ func (s *testPlanSuite) TestVisitInfo(c *C) {
 				{mysql.ExtendedPriv, "", "", "", ErrSpecificAccessDenied, "ROLE_ADMIN", false},
 			},
 		},
+		{
+			sql: "GRANT BACKUP_ADMIN ON *.* TO user1",
+			ans: []visitInfo{
+				{mysql.ExtendedPriv, "", "", "", ErrSpecificAccessDenied, "BACKUP_ADMIN", true},
+			},
+		},
+		{
+			sql: "GRANT BACKUP_ADMIN ON *.* TO user1 WITH GRANT OPTION",
+			ans: []visitInfo{
+				{mysql.ExtendedPriv, "", "", "", ErrSpecificAccessDenied, "BACKUP_ADMIN", true},
+			},
+		},
 	}
 
 	for _, tt := range tests {
