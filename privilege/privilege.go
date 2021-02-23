@@ -86,6 +86,9 @@ type Manager interface {
 	CheckOldPwd(user string, host string, pwd string) bool
 	// AddNewPwd ...
 	AddNewPwd(user string, host string, pwd string) string
+
+	// IsDynamicPrivilege returns if a privilege is in the list of privileges.
+	IsDynamicPrivilege(privNameInUpper string) bool
 }
 
 const key keyType = 0
