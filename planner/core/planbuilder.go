@@ -50,6 +50,7 @@ import (
 	utilparser "github.com/pingcap/tidb/util/parser"
 	"github.com/pingcap/tidb/util/ranger"
 	"github.com/pingcap/tidb/util/set"
+	"github.com/pingcap/tidb/util/sqlexec"
 
 	"github.com/cznic/mathutil"
 	"go.uber.org/zap"
@@ -2650,6 +2651,19 @@ func (b *PlanBuilder) buildDDL(ctx context.Context, node ast.DDLNode) (Plan, err
 			}
 			b.visitInfo = appendVisitInfo(b.visitInfo, mysql.SelectPriv, v.ReferTable.Schema.L,
 				v.ReferTable.Name.L, "", authErr)
+		}
+		if v.IsTemporary {
+			if v.Table.Schema.L != "tidb_temporary" {
+				return nil, errors.New("preprocess should have rewrite the temporary table schema name")
+			}
+			// Create the temporary table schema before the execute phase.
+			_, ok := b.is.SchemaByName(v.Table.Schema)
+			if !ok {
+				_, _, err := b.ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL("CREATE DATABASE tidb_temporary")
+				if err != nil {
+					return nil, err
+				}
+			}
 		}
 	case *ast.CreateViewStmt:
 		b.capFlag |= canExpandAST

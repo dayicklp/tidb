@@ -1186,6 +1186,11 @@ func (p *MySQLPrivilege) RequestVerification(activeRoles []*auth.RoleIdentity, u
 
 // DBIsVisible checks whether the user can see the db.
 func (p *MySQLPrivilege) DBIsVisible(user, host, db string) bool {
+	// Temporary table schema is not visible to all users;
+	if strings.EqualFold(db, "tidb_temporary") {
+		return false
+	}
+
 	if record := p.matchUser(user, host); record != nil {
 		if record.Privileges&globalDBVisible > 0 {
 			return true

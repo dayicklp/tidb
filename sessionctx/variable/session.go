@@ -597,6 +597,8 @@ type SessionVars struct {
 
 	// OptimizerUseInvisibleIndexes indicates whether optimizer can use invisible index
 	OptimizerUseInvisibleIndexes bool
+
+	TemporaryTable map[string]string
 }
 
 // PreparedParams contains the parameters of the current prepared statement when executing it.

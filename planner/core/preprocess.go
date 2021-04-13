@@ -185,6 +185,9 @@ func (p *preprocessor) Leave(in ast.Node) (out ast.Node, ok bool) {
 		p.flag &= ^inCreateOrDropTable
 		p.checkAutoIncrement(x)
 		p.checkContainDotColumn(x)
+		if x.IsTemporary {
+			x.Table.Schema = model.NewCIStr("tidb_temporary")
+		}
 	case *ast.CreateViewStmt:
 		p.flag &= ^inCreateOrDropTable
 	case *ast.DropTableStmt, *ast.AlterTableStmt, *ast.RenameTableStmt:
@@ -827,12 +830,22 @@ func (p *preprocessor) checkContainDotColumn(stmt *ast.CreateTableStmt) {
 
 func (p *preprocessor) handleTableName(tn *ast.TableName) {
 	if tn.Schema.L == "" {
-		currentDB := p.ctx.GetSessionVars().CurrentDB
-		if currentDB == "" {
-			p.err = errors.Trace(ErrNoDB)
-			return
+		sessVars := p.ctx.GetSessionVars()
+		// Take the temporary table into consideration.
+		if len(sessVars.TemporaryTable) > 0 {
+			realName, exist := sessVars.TemporaryTable[tn.Name.L]
+			if exist {
+				tn.Schema = model.NewCIStr("tidb_temporary")
+				tn.Name = model.NewCIStr(realName)
+			}
+		} else {
+			currentDB := p.ctx.GetSessionVars().CurrentDB
+			if currentDB == "" {
+				p.err = errors.Trace(ErrNoDB)
+				return
+			}
+			tn.Schema = model.NewCIStr(currentDB)
 		}
-		tn.Schema = model.NewCIStr(currentDB)
 	}
 	if p.flag&inCreateOrDropTable > 0 {
 		// The table may not exist in create table or drop table statement.

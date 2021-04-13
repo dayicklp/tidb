@@ -1511,6 +1511,13 @@ func (s *session) Close() {
 	if s.sessionVars != nil {
 		s.sessionVars.WithdrawAllPreparedStmt()
 	}
+
+	if len(s.GetSessionVars().TemporaryTable) > 0 {
+		for _, tbl := range s.GetSessionVars().TemporaryTable {
+			_, _, err := s.ExecRestrictedSQL(fmt.Sprintf("DROP TABLE tidb_temporary.%s", tbl))
+			terror.Log(err)
+		}
+	}
 }
 
 // GetSessionVars implements the context.Context interface.

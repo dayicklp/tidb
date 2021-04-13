@@ -16,7 +16,9 @@ package executor
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
@@ -207,8 +209,26 @@ func (e *DDLExec) executeAlterDatabase(s *ast.AlterDatabaseStmt) error {
 	return err
 }
 
+func genRandomName() string {
+	return fmt.Sprintf("gen_r%d_t%d", rand.Intn(4096), time.Now().Unix())
+}
+
 func (e *DDLExec) executeCreateTable(s *ast.CreateTableStmt) error {
+	sessVars := e.ctx.GetSessionVars()
+	saveName := s.Table.Name
+	if s.IsTemporary {
+		// Generate a random name for the temporary table like tidb_temporary.gen_r232_t32355623
+		for e.is.TableExists(s.Table.Schema, s.Table.Name) {
+			s.Table.Name = model.NewCIStr(genRandomName())
+		}
+	}
 	err := domain.GetDomain(e.ctx).DDL().CreateTable(e.ctx, s)
+	if err == nil && s.IsTemporary {
+		if sessVars.TemporaryTable == nil {
+			sessVars.TemporaryTable = make(map[string]string)
+			sessVars.TemporaryTable[saveName.L] = s.Table.Name.L
+		}
+	}
 	return err
 }
 
@@ -283,7 +303,17 @@ const (
 )
 
 func (e *DDLExec) executeDropTable(s *ast.DropTableStmt) error {
-	return e.dropTableObject(s.Tables, tableObject, s.IfExists)
+	err := e.dropTableObject(s.Tables, tableObject, s.IfExists)
+	if err == nil && !s.IsView {
+		for _, tbl := range s.Tables {
+			if tbl.Schema.L == "tidb_temporary" {
+				// Drop the temporary table should also update the session.
+				sessVars := e.ctx.GetSessionVars()
+				delete(sessVars.TemporaryTable, tbl.Name.L)
+			}
+		}
+	}
+	return err
 }
 
 func (e *DDLExec) executeDropView(s *ast.DropTableStmt) error {
