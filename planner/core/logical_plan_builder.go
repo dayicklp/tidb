@@ -1069,6 +1069,22 @@ func (b *PlanBuilder) buildProjection4Union(ctx context.Context, u *LogicalUnion
 }
 
 func (b *PlanBuilder) buildUnion(ctx context.Context, union *ast.UnionStmt) (LogicalPlan, error) {
+	if union.With != nil {
+		// Check CTE name must be unique.
+		nameMap := make(map[string]struct{})
+		for _, cte := range union.With.CTEs {
+			if _, ok := nameMap[cte.Name.L]; ok {
+				return nil, errors.New("Not unique table/alias")
+			}
+			nameMap[cte.Name.L] = struct{}{}
+		}
+		l := len(union.With.CTEs)
+		defer func() {
+			b.outerCTEs = b.outerCTEs[:len(b.outerCTEs)-l]
+		}()
+		b.outerCTEs = append(b.outerCTEs, union.With.CTEs...)
+	}
+
 	distinctSelectPlans, allSelectPlans, err := b.divideUnionSelectPlans(ctx, union.SelectList.Selects)
 	if err != nil {
 		return nil, err
@@ -2408,6 +2424,22 @@ func (b *PlanBuilder) buildSelect(ctx context.Context, sel *ast.SelectStmt) (p L
 		gbyCols                       []expression.Expression
 	)
 
+	if sel.With != nil {
+		// Check CTE name must be unique.
+		nameMap := make(map[string]struct{})
+		for _, cte := range sel.With.CTEs {
+			if _, ok := nameMap[cte.Name.L]; ok {
+				return p, errors.New("Not unique table/alias")
+			}
+			nameMap[cte.Name.L] = struct{}{}
+		}
+		l := len(sel.With.CTEs)
+		defer func() {
+			b.outerCTEs = b.outerCTEs[:len(b.outerCTEs)-l]
+		}()
+		b.outerCTEs = append(b.outerCTEs, sel.With.CTEs...)
+	}
+
 	if sel.From != nil {
 		p, err = b.buildResultSetNode(ctx, sel.From.TableRefs)
 		if err != nil {
@@ -2611,10 +2643,48 @@ func getStatsTable(ctx sessionctx.Context, tblInfo *model.TableInfo, pid int64) 
 	return statsTbl
 }
 
+func (b *PlanBuilder) buildDataSourceFromCTE(ctx context.Context, cte *ast.CommonTableExpression) (LogicalPlan, error) {
+	p, err := b.buildResultSetNode(ctx, cte.Query.Query)
+	if err != nil {
+		return nil, err
+	}
+	outPutNames := p.OutputNames()
+	for _, name := range outPutNames {
+		name.TblName = cte.Name
+		name.DBName = model.NewCIStr(b.ctx.GetSessionVars().CurrentDB)
+	}
+
+	if len(cte.ColNameList) > 0 {
+		if len(cte.ColNameList) != len(p.OutputNames()) {
+			return nil, errors.New("CTE columns length is not consistent.")
+		}
+		for i, n := range cte.ColNameList {
+			outPutNames[i].ColName = n
+		}
+	}
+	p.SetOutputNames(outPutNames)
+	return p, nil
+}
+
 func (b *PlanBuilder) buildDataSource(ctx context.Context, tn *ast.TableName, asName *model.CIStr) (LogicalPlan, error) {
 	dbName := tn.Schema
 	sessionVars := b.ctx.GetSessionVars()
+
 	if dbName.L == "" {
+		// Try CTE
+		last := len(b.outerCTEs) - 1
+		for i := last; i >= 0; i-- {
+			cte := b.outerCTEs[i]
+			if cte.Name.L == tn.Name.L {
+				saveCte := b.outerCTEs[i:]
+				b.outerCTEs = b.outerCTEs[:i]
+				defer func() {
+					b.outerCTEs = append(b.outerCTEs, saveCte...)
+				}()
+				return b.buildDataSourceFromCTE(ctx, cte)
+			}
+		}
+
 		dbName = model.NewCIStr(sessionVars.CurrentDB)
 	}
 

@@ -49,7 +49,7 @@ func InTxnRetry(p *preprocessor) {
 
 // Preprocess resolves table names of the node, and checks some statements validation.
 func Preprocess(ctx sessionctx.Context, node ast.Node, is infoschema.InfoSchema, preprocessOpt ...PreprocessOpt) error {
-	v := preprocessor{is: is, ctx: ctx, tableAliasInJoin: make([]map[string]interface{}, 0)}
+	v := preprocessor{is: is, ctx: ctx, tableAliasInJoin: make([]map[string]interface{}, 0), withName: make(map[string]interface{})}
 	for _, optFn := range preprocessOpt {
 		optFn(&v)
 	}
@@ -86,6 +86,7 @@ type preprocessor struct {
 	// tableAliasInJoin is a stack that keeps the table alias names for joins.
 	// len(tableAliasInJoin) may bigger than 1 because the left/right child of join may be subquery that contains `JOIN`
 	tableAliasInJoin []map[string]interface{}
+	withName         map[string]interface{}
 }
 
 func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
@@ -155,6 +156,10 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 	case *ast.FuncCallExpr:
 		if node.FnName.L == ast.NextVal || node.FnName.L == ast.LastVal || node.FnName.L == ast.SetVal {
 			p.flag |= inSequenceFunction
+		}
+	case *ast.WithClause:
+		for _, cte := range node.CTEs {
+			p.withName[cte.Name.L] = struct{}{}
 		}
 	default:
 		p.flag &= ^parentIsJoin
@@ -839,6 +844,9 @@ func (p *preprocessor) handleTableName(tn *ast.TableName) {
 				tn.Name = model.NewCIStr(realName)
 			}
 		} else {
+			if _, ok := p.withName[tn.Name.L]; ok {
+				return
+			}
 			currentDB := p.ctx.GetSessionVars().CurrentDB
 			if currentDB == "" {
 				p.err = errors.Trace(ErrNoDB)
