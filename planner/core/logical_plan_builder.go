@@ -112,6 +112,9 @@ const (
 	HintIgnorePlanCache = "ignore_plan_cache"
 	// HintLimitToCop is a hint enforce pushing limit or topn to coprocessor.
 	HintLimitToCop = "limit_to_cop"
+	//HintCTEInline is a hint which can switch turning inline or materializing for the CTE.
+	//code by dyp
+	HintCTEInline = "cte_inline"
 )
 
 const (
@@ -3499,6 +3502,8 @@ func (b *PlanBuilder) pushHintWithoutTableWarning(hint *ast.TableOptimizerHint) 
 	b.ctx.GetSessionVars().StmtCtx.AppendWarning(ErrInternal.GenWithStack(errMsg))
 }
 
+//添加inline hint操作，从第一行代码开始
+//code by dyp
 func (b *PlanBuilder) pushTableHints(hints []*ast.TableOptimizerHint, currentLevel int) {
 	hints = b.hintProcessor.GetCurrentStmtHints(hints, currentLevel)
 	var (
@@ -3508,6 +3513,8 @@ func (b *PlanBuilder) pushTableHints(hints []*ast.TableOptimizerHint, currentLev
 		aggHints                                                                        aggHintInfo
 		timeRangeHint                                                                   ast.HintTimeRange
 		limitHints                                                                      limitHintInfo
+		CTEHints                                                                        CTEHintInfo
+		//code by dyp
 	)
 	for _, hint := range hints {
 		// Set warning for the hint that requires the table name.
@@ -3610,6 +3617,10 @@ func (b *PlanBuilder) pushTableHints(hints []*ast.TableOptimizerHint, currentLev
 			timeRangeHint = hint.HintData.(ast.HintTimeRange)
 		case HintLimitToCop:
 			limitHints.preferLimitToCop = true
+		//make CTEHints struct
+		//code by dyp
+		case HintCTEInline:
+			CTEHints.preferInlineToCTE = true
 		default:
 			// ignore hints that not implemented
 		}
@@ -3626,6 +3637,7 @@ func (b *PlanBuilder) pushTableHints(hints []*ast.TableOptimizerHint, currentLev
 		indexMergeHintList:        indexMergeHintList,
 		timeRangeHint:             timeRangeHint,
 		limitHints:                limitHints,
+		CTEHints:                  CTEHints,
 	})
 }
 
@@ -4127,6 +4139,22 @@ func (b *PlanBuilder) tryBuildCTE(ctx context.Context, tn *ast.TableName, asName
 			lp := LogicalCTE{cteAsName: tn.Name, cte: cte.cteClass, seedStat: cte.seedStat, isOuterMostCTE: !b.buildingCTE}.Init(b.ctx, b.getSelectOffset())
 			prevSchema := cte.seedLP.Schema().Clone()
 			lp.SetSchema(getResultCTESchema(cte.seedLP.Schema(), b.ctx.GetSessionVars()))
+			// 这里设置logical cte ，有设置的ctehints参数，判断是否是递归cte来通过hint选择
+			//make cteinline is ture, that will use merge way to run
+			//by dyp
+			// if hint is inline
+			if hint := b.TableHints(); hint != nil {
+				lp.CTEHints = hint.CTEHints
+			}
+			if lp.CTEHints.preferInlineToCTE == true {
+				saveCte := b.outerCTEs[i:]
+				b.outerCTEs = b.outerCTEs[:i]
+				defer func() {
+					b.outerCTEs = append(b.outerCTEs, saveCte...)
+				}()
+				return b.buildDataSourceFromCTEInline(ctx, cte.def)
+			}
+
 			for i, col := range lp.schema.Columns {
 				lp.cte.ColumnMap[string(col.HashCode(nil))] = prevSchema.Columns[i]
 			}
@@ -4147,6 +4175,31 @@ func (b *PlanBuilder) tryBuildCTE(ctx context.Context, tn *ast.TableName, asName
 	}
 
 	return nil, nil
+}
+
+// build CTE_inline
+//code by dyp
+func (b *PlanBuilder) buildDataSourceFromCTEInline(ctx context.Context, cte *ast.CommonTableExpression) (LogicalPlan, error) {
+	p, err := b.buildResultSetNode(ctx, cte.Query.Query)
+	if err != nil {
+		return nil, err
+	}
+	outPutNames := p.OutputNames()
+	for _, name := range outPutNames {
+		name.TblName = cte.Name
+		name.DBName = model.NewCIStr(b.ctx.GetSessionVars().CurrentDB)
+	}
+
+	if len(cte.ColNameList) > 0 {
+		if len(cte.ColNameList) != len(p.OutputNames()) {
+			return nil, errors.New("CTE columns length is not consistent.")
+		}
+		for i, n := range cte.ColNameList {
+			outPutNames[i].ColName = n
+		}
+	}
+	p.SetOutputNames(outPutNames)
+	return p, nil
 }
 
 func (b *PlanBuilder) buildDataSource(ctx context.Context, tn *ast.TableName, asName *model.CIStr) (LogicalPlan, error) {
